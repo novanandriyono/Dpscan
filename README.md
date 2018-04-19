@@ -1,6 +1,5 @@
 # Dpscan
 Directory Scaner Recursive Laravel
-Results use Laravel Collection
 
 ## Install via Composer
 
@@ -15,22 +14,27 @@ use Dpscan\Support\Facades\Dpscan;
 
 $root = public_path();
 $dir = Dpscan::setdir($root);
-$allfiles = $dir->all();
 
 echo "<pre>";
-var_dump($allfiles->results());
+var_dump($dir->get());
+//get collection items
+var_dump($dir->get()->items());
 echo "</pre>";
 
 //or
 
 echo "<pre>";
-var_dump($allfiles->getfiles());
+var_dump($dir->onlyfiles());
+get collection items
+var_dump($dir->onlyfiles()->items());
 echo "</pre>";
 
 //or
 
 echo "<pre>";
-var_dump($allfiles->getdir());
+var_dump($dir->onlydir());
+//get collection items
+var_dump($dir->onlydir()->items());
 echo "</pre>";
 
 ```
