@@ -1,4 +1,4 @@
 <?php
 return [
-    'untrack' => []
+	'root' => base_path()
 ];
