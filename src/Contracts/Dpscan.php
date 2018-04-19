@@ -4,8 +4,7 @@ namespace Dpscan\Contracts;
 interface Dpscan{
 	public function setdir($dir);
 	public function get();
-	public function all();
-	public function results();
-	public function getfiles();
-	public function getdir();
+	public function onlyfiles();
+	public function onlydir();
+	public function items();
 }
