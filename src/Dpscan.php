@@ -16,11 +16,10 @@ class Dpscan implements DpscanInterface
      */
     protected $items = [];
 
-	public function __construct(array $items = []){
-		if(func_num_args() !== 1){
+	public function __construct(){
+		if(func_num_args() !== 0){
 			return;
 		}
-		$this->items = $items;
 	}
 
 	public function setdir($dir = null){
@@ -47,10 +46,8 @@ class Dpscan implements DpscanInterface
 	}
 
 	protected function setonlydir(){
-		$lists = $this->get()->items()->toArray();
-		$class = get_class();
-		$onlydir = new static(array_keys(array_flip($lists)));
-		return $onlydir->setdir($this->rootfolder);
+		$items = array_keys(array_flip($this->get()->items));
+		return $this->createItems($items);
 	}
 
 	public function onlyfiles(){
@@ -58,16 +55,30 @@ class Dpscan implements DpscanInterface
 	}
 
 	protected function setonlyfiles(){
-		$lists = array_keys($this->get()->items()->toArray());
-		$onlydir = array_flip($this->onlydir()->items()->toArray());
+		$lists = array_keys($this->get()->items);
+		$onlydir = array_flip($this->onlydir()->items);
 		for ($i=0; $i < count($lists) ; $i++) {
-				$item = $lists[$i];
+			$item = $lists[$i];
 			if(isset($onlydir[$item]) === true){
 				unset($lists[$i]);
 			}
 		}
-		$results = new static(array_values($lists));
-		return $results->setdir($this->rootfolder);
+		return $this->createItems(array_values($lists));
+	}
+
+	public function except(array $array = []){
+		return $this->setexcept($array);
+	}
+
+	protected function setexcept(array $array = []){
+		$lists = array_flip($this->items);
+		for ($i=0; $i < count($array); $i++) {
+			$items = $this->rootfolder.DIRECTORY_SEPARATOR.$array[$i];
+			if(isset($lists[$items])){
+				unset($lists[$items]);
+			}
+		}
+		return $this->createItems(array_values(array_flip($lists)));
 	}
 
 	protected function getContent(){
@@ -83,9 +94,10 @@ class Dpscan implements DpscanInterface
 		}
 		if((is_dir($this->rootfolder) === true) &&
 			(is_writable($this->rootfolder) === true)){
-			$this->items = $this->fixArray(scandir($this->rootfolder));
-			$this->items = new static($this->items);
-			return $this->items->setdir($this->rootfolder)->getAllContent();
+			$next = new static;
+			$next->rootfolder = $this->rootfolder;
+			$next->items = $this->fixArray(scandir($this->rootfolder));
+			return $next->getAllContent();
 		}
 		return $this->items;
 	}
@@ -95,8 +107,8 @@ class Dpscan implements DpscanInterface
 	}
 
 	protected function getitems(){
-		$this->items = new static($this->items);
-		return $this->items->setitems();
+		$this->items = new static($this);
+		return $this->items->items->setitems();
 	}
 
 	protected function setitems(){
@@ -112,22 +124,27 @@ class Dpscan implements DpscanInterface
 			$item = $this->rootfolder.DIRECTORY_SEPARATOR.$this->items[$now];
 			$results[$item] = $this->rootfolder;
 			if(is_dir($item)){
-				$newfolder = new static([]);
+				$newfolder = new static;
 				$newitems = $newfolder->setdir($item)->get();
 				$results = $results + $newitems->items;
 			}
 			$next = $now + 1;
 			return $this->getAllContent($next,$results);
 		}
-		$results = new static($results);
-		$results = $results->setdir($this->rootfolder);
-		return $results;
+		return $this->createItems($results);
 	}
 
 	protected function fixArray($array = []){
 		unset($array[0]);
         unset($array[1]);
         return array_values($array);
+	}
+
+	protected function createItems(array $items = []){
+		$new = new static;
+		$new->rootfolder = $this->rootfolder;
+		$new->items = $items;
+		return $new;
 	}
 
 	private function config(){
