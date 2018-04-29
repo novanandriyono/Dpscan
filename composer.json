@@ -41,7 +41,7 @@
                 "Dpscan": "Dpscan\\Support\\Facades\\Dpscan"
             },
             "branch-alias": {
-                "dev-master": "1.0.5-dev"
+                "dev-master": "1.0.x-dev"
             }
         }
     },
