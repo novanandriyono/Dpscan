@@ -1,14 +1,18 @@
 # Dpscan
-Directory Scaner Recursive Laravel
+Just a directory scanner.
 
 ## Install via Composer
-
 ```
-composer require novanandriyono/dpscan:dev-master
+composer require novanandriyono/dpscan
 ```
 
 ## List of Actions
-* setdir(string $dir); //set root dir;
+Set base dir
+* setdir(string $dir);
+
+### Results Items
+* get(); get all items inside directory
+* all(); to get recursive
 
 ### Results Only Files Or Directory
 * onlyfiles(); // results only files
@@ -41,26 +45,51 @@ Using Regex to except
 
 ### Results Items
 * items(); //get collection
-* get();
 
 ### Change root folder
 After root change DIRECTORY_SEPARATOR will be close '/';
 * rootchange(string dir);
 
-## How to use
-Value is root dir from key array, use get() or items() to make key become value;
+### Change root folder
+After root change DIRECTORY_SEPARATOR will be close '/';
+* rootchange(string dir);
+
+### Saving last result with Cache
+option = action
+* cache(int $minutes,string $key,string $option);
 ```
-use Dpscan\Support\Facades\Dpscan;
+$dir = storage_path();
+setdir($dir)->cache(10,$dir,'all')->contains(['.jpg','.png'])->rootchange(url())->items()->toJson();
+```
+or
+```
+$userdir = public_path('/data/'.$user->id);
+setdir($userdir)->cache(10,$userdir,'all')->onlyfiles()->contains(['.jpg','.png'])->rootchange(url())->items()->toJson();
+```
+or
+```
+$username = \Auth::user()->username;
+$userdir = public_path($username.'/media');
+$contains = \Request::input()->all() + ['.jpg'];
+setdir($userdir)->cache(10,$userdir,'all')->onlyfiles()->contains($contains)->rootchange(null)->items()->toJson();
+```
+and I never tried XD
+
+## How to use
+Results on array. both key and value are same. use array_values/array_keys to
+get int key or using collection
+```
+use Dpscan;
 
 $root = public_path();
 $dir = Dpscan::setdir($root);
 
 echo "<pre>";
-var_dump($dir->get());
+var_dump($dir->all());
 echo "</pre>";
 //or
 echo "<pre>";
-var_dump($dir->contains(['js'])->onlydir());
+dd($dir->onlyfiles()->contains(['js','css'])->rootchange(null)->items()->toJson());
 echo "</pre>";
 
 ```
@@ -69,5 +98,4 @@ echo "</pre>";
 i made dpscan because lexroute need this XD.
 
 ## License
-
 This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details
