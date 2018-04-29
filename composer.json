@@ -39,12 +39,10 @@
             ],
             "aliases": {
                 "Dpscan": "Dpscan\\Support\\Facades\\Dpscan"
+            },
+            "branch-alias": {
+                "dev-master": "1.4-dev"
             }
-        }
-    },
-    "extra": {
-        "branch-alias": {
-            "dev-master": "development-dev"
         }
     },
     "config": {
