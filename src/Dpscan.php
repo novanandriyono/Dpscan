@@ -3,6 +3,7 @@ namespace Dpscan;
 
 use Dpscan\Contracts\Dpscan as DpscanInterface;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Cache;
 use Exception;
 
 class Dpscan implements DpscanInterface
@@ -18,24 +19,67 @@ class Dpscan implements DpscanInterface
 
 	public function __construct(){
 		if(func_num_args() !== 0){
+			if($this->config('debug')===true){
+				throw new Exception("Arguments must be 0:", 1);
+			}
 			return;
 		}
+		$this->rootfolder = $this->setRootFolder();
 	}
 
 	public function setdir(string $dir){
+		return $this->getdir($dir);
+	}
+
+	protected function getdir(string $dir = null){
 		if(func_num_args() !== 1){
+			if($this->config('debug')===true){
+				throw new Exception("Arguments must be 0:", 1);
+			}
 			return;
 		}
-		if(str_contains($dir,$this->config()->root) !== true){
+		if(strpos($dir,$this->rootfolder) === false){
+			$dir = $this->rootfolder.DIRECTORY_SEPARATOR.$dir;
+		}
+		if(is_dir($dir) !== true){
+			if($this->config('debug')===true){
+				throw new Exception("not Dir:". $dir, 1);
+			}
 			return;
 		}
-		if((is_dir($dir) !== true)
-			|| (str_contains($dir,base_path()) !== true)){
-			return;
-		}
-		$this->rootfolder = $dir;
-		// return $this->createItems($this->getContent()->items);
+		$this->rootfolder = (is_dir($dir) === true)?$dir:exit();
 		return $this;
+	}
+
+	public function cache(int $minutes,string $key,string $option){
+		return $this->getCache($minutes,$key,$option);
+	}
+
+	protected function getcache(int $minutes,string $key,string $option){
+		if(Cache::has($key)){
+			$cache = json_decode(base64_decode(Cache::get($key)),true);
+			return $this->createItems($cache);
+		}
+		$this->setCache($minutes,$key,$option);
+		return $this->getcache(10,$key,$option);
+	}
+
+	protected function setcache(int $minutes,string $key,string $option){
+		$listmethod = array_flip(get_class_methods(DpscanInterface::class));
+		if(isset($listmethod[$option]) === null){
+			if($this->config('debug')===true){
+				throw new Exception("Unknow Action: ".$string, 1);
+			}
+		}
+		$cache = Cache::remember($key, $minutes, function () use($option) {
+			$data = new static;
+			$data = $data->setdir($this->rootfolder)->$option()->items;
+		    return base64_encode(
+		    	json_encode(
+		    		$data
+		    	)
+		    );
+		});
 	}
 
 	public function rootchange(string $dir){
@@ -44,23 +88,23 @@ class Dpscan implements DpscanInterface
 
 	protected function setrootchange(string $dir){
 		if(func_num_args() !== 1){
+			if($this->config('debug')===true){
+				throw new Exception("Arguments must be 1:", 1);
+			}
 			return;
 		}
-		if(is_numeric(key($this->items)) === false){
-			$items = array_keys($this->getContent()->items);
-		}else{
-			$items = $this->items;
-		}
+		$items = $this->resoleveItem();
+		$key = array_keys($items);
+		$results = [];
 		for ($i=0; $i < count($items) ; $i++) {
-			$items[$i] = str_replace(
+			$item = str_replace(
 				[$this->rootfolder,DIRECTORY_SEPARATOR],
 				[$dir,'/'],
-				$items[$i]);
+				$items[$key[$i]]);
+			$results[$item] = $item;
 		}
-		$new = new static;
-		$new->rootfolder = $dir;
-		$new->items = $items;
-		return $new;
+		$this->rootfolder = $dir;
+		return $this->createItems($results);
 	}
 
 	public function get(){
@@ -68,11 +112,15 @@ class Dpscan implements DpscanInterface
 	}
 
 	protected function setget(){
-		if(is_numeric(key($this->items)) === false){
-			return $this->createItems(array_keys($this->getContent()->items));
-		}else{
-			return $this->createItems($this->items);
-		}
+		return $this->createItems($this->resoleveItem());
+	}
+
+	public function all(){
+		return $this->setall();
+	}
+
+	protected function setall(){
+		return $this->getAllContent($this->resoleveItem());
 	}
 
 	public function onlydir(){
@@ -80,32 +128,26 @@ class Dpscan implements DpscanInterface
 	}
 
 	protected function setonlydir(){
-		if(is_numeric(key($this->items)) === false){
-			return $this->createItems(array_keys(array_flip($this->getContent()->items)));
-		}else{
-			return $this->getResultByType($this->items);
-		}
+		return $this->getResultByType(0);
 	}
 
-	protected function getResultByType(array $lists,int $option=0){
+	protected function getResultByType(int $option=0){
 		$range = range(0,1);
 		if(isset($range[$option]) === false){
 			return [];
 		}
+		$lists = $this->resoleveItem();
 		$results = [];
-		for ($i=0; $i < count($lists); $i++) {
-			if($option===0){
-				if(is_dir($lists[$i])){
-					$results[]=$lists[$i];
-				}
+		$key = array_keys($lists);
+		for ($i=0; $i < count($lists); $i++){
+			if(is_file($lists[$key[$i]])){
+				$results[1][$lists[$key[$i]]]=$lists[$key[$i]];
 			}
-			if($option===1){
-				if(is_file($lists[$i])){
-					$results[]=$lists[$i];
-				}
+			if(is_dir($lists[$key[$i]])){
+				$results[0][$lists[$key[$i]]]=$lists[$key[$i]];
 			}
 		}
-		return $this->createItems($results);
+		return $this->createItems($results[$option]);
 	}
 
 	public function onlyfiles(){
@@ -113,11 +155,7 @@ class Dpscan implements DpscanInterface
 	}
 
 	protected function setonlyfiles(){
-		if(is_numeric(key($this->items)) === false){
-			return $this->getResultByType(array_keys($this->getContent()->items),1);
-		}else{
-			return $this->getResultByType($this->items,1);
-		}
+		return $this->getResultByType(1);
 	}
 
 	public function except(array $array = []){
@@ -125,22 +163,16 @@ class Dpscan implements DpscanInterface
 	}
 
 	protected function setexcept(array $array = []){
-		if(is_numeric(key($this->items)) === false){
-			$listss =  $this->getContent()->items;
-		}else{
-			$lists = $this->items;
-		}
+		$lists = $this->resoleveItem();
 		$lists = array_flip($lists);
+		$key = array_keys($lists);
 		for ($i=0; $i < count($array); $i++) {
 			$items = $this->rootfolder.DIRECTORY_SEPARATOR.$array[$i];
-			if(file_exists($items) === false){
-				throw new Exception("NotFound except: ".$items);
-			}
-			if(isset($lists[$items])){
+			if(isset($lists[$items])!== null){
 				unset($lists[$items]);
 			}
 		}
-		return $this->createItems(array_values(array_flip($lists)));
+		return $this->createItems(array_values($lists));
 	}
 
 	protected function getContent(){
@@ -152,11 +184,7 @@ class Dpscan implements DpscanInterface
 	}
 
 	protected function setnotcontains(array $array = []){
-		if(is_numeric(key($this->items)) === false){
-			return $this->getResultsByContains($array,$this->get()->items,0);
-		}else{
-			return $this->getResultsByContains($array,$this->items,0);
-		}
+		return $this->getResultsByContains($array,$this->resoleveItem(),0);
 	}
 
 	public function notcontainsfiles(array $array = []){
@@ -172,11 +200,7 @@ class Dpscan implements DpscanInterface
 	}
 
 	protected function setcontains(array $array = []){
-		if(is_numeric(key($this->items)) === false){
-			return $this->getResultsByContains($array,$this->get()->items,1);
-		}else{
-			return $this->getResultsByContains($array,$this->items,1);
-		}
+		return $this->getResultsByContains($array,$this->resoleveItem(),1);
 	}
 
 	public function containsfiles(array $array = []){
@@ -187,21 +211,26 @@ class Dpscan implements DpscanInterface
 		return $this->getResultsByContains($array,$this->onlydir()->items,1);
 	}
 
-	protected function getResultsByContains(array $contains,array $lists,int $option, array $results = []){
+	protected function getResultsByContains(array $contains,array $lists,int $option){
 		$range = range(0,1);
 		if(isset($range[$option]) === false){
 			return [];
 		}
+		if(count($lists) === 0){
+			$lists = $this->resoleveItem();
+		}
+		$results = [];
+		$key = array_keys($lists);
 		for ($i=0; $i < count($contains); $i++) {
 			$item = $contains[$i];
 			for ($l=0; $l < count($lists); $l++) {
-				if(strpos($lists[$l], $item) === false){
+				if(strpos($lists[$key[$l]], $item) === false){
 					if($option === 0){
-						$results[$lists[$l]][$i] = $lists[$l];
+						$results[$lists[$key[$l]]][$i] = $lists[$key[$l]];
 					}
 				}else{
 					if($option === 1){
-						$results[$lists[$l]] = $lists[$l];
+						$results[$lists[$key[$l]]] = $lists[$key[$l]];
 					}
 				}
 			}
@@ -211,11 +240,10 @@ class Dpscan implements DpscanInterface
 			$results = [];
 			for ($i=0; $i < count($newResult); $i++) {
 				if(count($newResult[$i]) === count($contains)){
-					$results[] = $newResult[$i][0];
+					$results[$newResult[$i][0]] = $newResult[$i][0];
 				}
 			}
 		}
-		$results = array_values(array_keys(array_flip($results)));
 		return $this->createItems($results);
 	}
 
@@ -224,11 +252,7 @@ class Dpscan implements DpscanInterface
 	}
 
 	protected function setregexcept(array $array = []){
-		if(is_numeric(key($this->items)) === false){
-			return $this->getResultsByRegex($array,$this->get()->items,0);
-		}else{
-			return $this->getResultsByRegex($array,$this->items,0);
-		}
+		return $this->getResultsByRegex($array,$this->get()->items,0);
 	}
 
 	public function regexceptfiles(array $array = []){
@@ -244,11 +268,7 @@ class Dpscan implements DpscanInterface
 	}
 
 	protected function setregexonly(array $array = []){
-		if(is_numeric(key($this->items)) === false){
-			return $this->getResultsByRegex($array,$this->get()->items,1);
-		}else{
-			return $this->getResultsByRegex($array,$this->items,1);
-		}
+		return $this->getResultsByRegex($array,$this->resoleveItem(),1);
 	}
 
 	public function regexonlyfiles(array $array = []){
@@ -259,20 +279,26 @@ class Dpscan implements DpscanInterface
 		return $this->getResultsByRegex($array,$this->onlydir()->items,1);
 	}
 
-	protected function getResultsByRegex(array $regex,array $lists,int $option,array $results = []){
+	protected function getResultsByRegex(array $regex,array $lists,int $option){
 		$range = range(0,1);
 		if(isset($range[$option]) === false){
 			return [];
 		}
-		for ($i=0; $i < count($regex); $i++) {
-			$item = $regex[$i];
+		if(count($lists) === 0){
+			$lists = $this->resoleveItem();
+		}
+		$key = array_keys($lists);
+		$results = [];
+		for ($i=0; $i < count($contains); $i++) {
+			$item = $contains[$i];
 			for ($l=0; $l < count($lists); $l++) {
 				if(preg_match($item, $lists[$l]) === $option){
 					if($option === 0){
-						$results[$lists[$l]][$i] = $lists[$l];
+						$results[$lists[$key[$l]]][$i] = $lists[$key[$l]];
 					}
+				}else{
 					if($option === 1){
-						$results[$lists[$l]] = $lists[$l];
+						$results[$lists[$key[$l]]] = $lists[$key[$l]];
 					}
 				}
 			}
@@ -281,12 +307,11 @@ class Dpscan implements DpscanInterface
 			$newResult = array_values($results);
 			$results = [];
 			for ($i=0; $i < count($newResult); $i++) {
-				if(count($newResult[$i]) === count($regex)){
-					$results[] = $newResult[$i][0];
+				if(count($newResult[$i]) === count($contains)){
+					$results[$newResult[$i][0]] = $newResult[$i][0];
 				}
 			}
 		}
-		$results = array_values(array_keys(array_flip($results)));
 		return $this->createItems($results);
 	}
 
@@ -294,17 +319,24 @@ class Dpscan implements DpscanInterface
 		if(func_num_args() !== 0){
 			return;
 		}
-		if(str_contains($this->rootfolder,$this->config()->root) !== true){
-			return;
+		if(str_contains($this->rootfolder,$this->config('root')) !== true){
+			throw new Exception($this->rootfolder
+				." must be inside of config path", 1);
 		}
-		if((is_dir($this->rootfolder) === true) &&
-			(is_writable($this->rootfolder) === true)){
-			$next = new static;
-			$next->rootfolder = $this->rootfolder;
-			$next->items = $this->fixArray(scandir($this->rootfolder));
-			return $next->getAllContent();
+		if (is_dir($this->rootfolder)){
+		    if ($dh = opendir($this->rootfolder)) {
+		        while (($file = readdir($dh)) !== false) {
+		            if ($file != "." && $file != "..") {
+			            if(strpos($this->protectedFile(),$file) === false){
+				            $item = $this->rootfolder.DIRECTORY_SEPARATOR.$file;
+			           		$this->items[$item] = $item;
+				    	}
+			        }
+		        }
+		        closedir($dh);
+		    }
 		}
-		return $this->items;
+		return $this->createItems($this->items);
 	}
 
 	public function items(){
@@ -319,39 +351,72 @@ class Dpscan implements DpscanInterface
 		return new Collection($this->items);
 	}
 
-	protected function getAllContent($now = 0, $results = []){
-		if(str_contains($this->rootfolder,$this->config()->root) !== true){
-			return;
-		}
-		$total = count($this->items);
+	protected function getAllContent(array $lists,$now = 0,array $results = []){
+		$total = count($lists);
 		if($now !== $total){
-			$item = $this->rootfolder.DIRECTORY_SEPARATOR.$this->items[$now];
-			$results[$item] = $this->rootfolder;
-			if(is_dir($item)){
+		$key = array_keys($lists);
+			$results[$lists[$key[$now]]] = $lists[$key[$now]];
+			if(is_dir($lists[$key[$now]])){
 				$newfolder = new static;
-				$newfolder->rootfolder = $item;
-				$results = $results + $newfolder->getContent()->items;
+				$newfolder->rootfolder = $lists[$key[$now]];
+				$new = $newfolder->all();
+				$results = $results + $new->items;
 			}
 			$next = $now + 1;
-			return $this->getAllContent($next,$results);
+			return $this->getAllContent($lists,$next,$results);
 		}
 		return $this->createItems($results);
 	}
 
-	protected function fixArray($array = []){
-		unset($array[0]);
-        unset($array[1]);
-        return array_values($array);
+	protected function resoleveItem(){
+		if(count($this->items) === 0){
+			$this->items = $this->getContent()->items;
+		}
+		return $this->items;
 	}
 
-	protected function createItems(array $items = []){
+	protected function createItems(array $items){
 		$new = new static;
 		$new->rootfolder = $this->rootfolder;
 		$new->items = $items;
 		return $new;
 	}
 
-	private function config(){
-        return (object) config('dpscan');
+	private function config(string $params = null){
+		if(func_num_args() !== 1){
+			if($this->config('debug')===true){
+				throw new Exception("Arguments must be 1:", 1);
+			}
+			return null;
+		}
+        return ($params === isset(config('dpscan')[$params]))?
+        $this->localConfig()[$params]:
+        config('dpscan')[$params];
+    }
+
+    private function localConfig(){
+    	if(func_num_args() !== 0){
+			return null;
+		}
+        return include(
+        	__DIR__.
+        	DIRECTORY_SEPARATOR.'config'.
+        	DIRECTORY_SEPARATOR.'dpscan.php');
+    }
+
+    protected function setRootFolder(){
+    	return (null === $this->config('root'))?__DIR__:$this->config('root');
+    }
+
+    protected function checkProtectedFile(int $now,string $item, array $results){
+    	if(strpos($this->protectedFile(),$item) !== false){
+			array_pop($results);
+			$next = $now + 1;
+			return $this->getAllContent($next,$results);
+    	}
+    }
+
+    protected function protectedFile(){
+    	return (null === $this->config('protected'))?[]:implode(' ',$this->config('protected'));
     }
 }
