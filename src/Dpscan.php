@@ -147,7 +147,8 @@ class Dpscan implements DpscanInterface
 				$results[0][$lists[$key[$i]]]=$lists[$key[$i]];
 			}
 		}
-		return $this->createItems($results[$option]);
+		$results = (isset($results[$option]))?$results[$option]:[];
+		return $this->createItems($results);
 	}
 
 	public function onlyfiles(){
@@ -244,6 +245,7 @@ class Dpscan implements DpscanInterface
 				}
 			}
 		}
+		$results = (count(array_values($result)) !== 0)?$results:[];
 		return $this->createItems($results);
 	}
 
@@ -312,6 +314,7 @@ class Dpscan implements DpscanInterface
 				}
 			}
 		}
+		$results = (count(array_values($result)) !== 0)?$results:[];
 		return $this->createItems($results);
 	}
 
@@ -323,13 +326,13 @@ class Dpscan implements DpscanInterface
 			throw new Exception($this->rootfolder
 				." must be inside of config path", 1);
 		}
-		if (is_dir($this->rootfolder)){
+		if(is_dir($this->rootfolder)){
 		    if ($dh = opendir($this->rootfolder)) {
 		        while (($file = readdir($dh)) !== false) {
 		            if ($file != "." && $file != "..") {
 			            if(strpos($this->protectedFile(),$file) === false){
-				            $item = $this->rootfolder.DIRECTORY_SEPARATOR.$file;
-			           		$this->items[$item] = $item;
+				       	$item = $this->rootfolder.DIRECTORY_SEPARATOR.$file;
+			           	$this->items[$item] = $item;
 				    	}
 			        }
 		        }
@@ -406,14 +409,6 @@ class Dpscan implements DpscanInterface
 
     protected function setRootFolder(){
     	return (null === $this->config('root'))?__DIR__:$this->config('root');
-    }
-
-    protected function checkProtectedFile(int $now,string $item, array $results){
-    	if(strpos($this->protectedFile(),$item) !== false){
-			array_pop($results);
-			$next = $now + 1;
-			return $this->getAllContent($next,$results);
-    	}
     }
 
     protected function protectedFile(){
