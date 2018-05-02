@@ -30,7 +30,7 @@ class DpscanServiceProvider extends ServiceProvider
     {
         $this->app->bind('Dpscan', function ($app) {
             $app->bind('Dpscan\Contracts\Dpscan',function(){
-                return new Dpscan();
+                return new Dpscan;
             });
             return $app->make('Dpscan\Contracts\Dpscan');
         });
