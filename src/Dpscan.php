@@ -2,14 +2,21 @@
 namespace Dpscan;
 
 use Dpscan\Contracts\Dpscan as DpscanInterface;
-use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\Facades\Cache;
+use Illuminate\Cache\CacheManager;
+use Illuminate\Container\Container;
+use Illuminate\Filesystem\Filesystem;
 use Exception;
 
 class Dpscan implements DpscanInterface
 {
+	/**
+     * The rootfolder.
+     *
+     * @var void
+     */
 
 	protected $rootfolder;
+
 	/**
      * The items contained in the collection.
      *
@@ -56,22 +63,30 @@ class Dpscan implements DpscanInterface
 	}
 
 	protected function getcache(int $minutes,string $key,string $option){
-		if(Cache::has($key)){
-			$cache = json_decode(base64_decode(Cache::get($key)),true);
-			return $this->createItems($cache);
+		$keylock = md5($key.$option);
+		if($this->cacheMan()->has($keylock) === true){
+			$this->checkUpdateCache($minutes,$key,$option);
+				$cache = json_decode(
+					base64_decode($this->cacheMan()->get($keylock)),true
+				);
+				return $this->createItems($cache);
 		}
 		$this->setCache($minutes,$key,$option);
-		return $this->getcache(10,$key,$option);
+		$this->setAutoCache($key,$option);
+		return $this->getcache(60,$key,$option);
 	}
 
 	protected function setcache(int $minutes,string $key,string $option){
 		$listmethod = array_flip(get_class_methods(DpscanInterface::class));
 		if(isset($listmethod[$option]) === null){
 			if($this->config('debug')===true){
-				throw new Exception("Unknow Action: ".$string, 1);
+				throw new Exception("Unknow Action: ".$option, 1);
 			}
+			return;
 		}
-		$cache = Cache::remember($key, $minutes, function () use($option) {
+		$keylock = md5($key.$option);
+		$this->cacheMan()->remember($keylock,$minutes, function ()
+			use($option){
 			$data = new static;
 			$data = $data->setdir($this->rootfolder)->$option()->items;
 		    return base64_encode(
@@ -82,17 +97,82 @@ class Dpscan implements DpscanInterface
 		});
 	}
 
+	protected function setAutoCache(string $key,string $option){
+		if($this->config('cacheautoupdate') === true){
+			$data = [];
+			$lockey = md5($this->cachePath());
+			if($this->cacheMan()->has($lockey)){
+				$data = json_decode(
+					base64_decode($this->cacheMan()->pull($lockey)),
+					true
+				);
+			}
+			$key = md5($key.$option);
+			$this->cacheMan()->remember($lockey,60,function() use($key,$data){
+				$data[$key]	= filemtime($this->rootfolder);
+				return base64_encode(json_encode($data));
+			});
+		}
+	}
+
+	protected function getAutoCache(){
+		$lockey = md5($this->cachePath());
+		return json_decode(
+					base64_decode($this->cacheMan()->get($lockey)),true);
+	}
+
+	protected function checkUpdateCache(int $minute,string $key,string $option){
+		if($this->config('cacheautoupdate') === true){
+			$cache = $this->getAutoCache();
+			$lockey = (string) md5($key.$option);
+			if($cache[$lockey] !== filemtime($this->rootfolder)){
+				$this->forgetcache($key,$option);
+				return $this->cache($minute, $key,$option);
+			}
+		}
+	}
+
+	public function forgetcache(string $key,string $option){
+		return $this->setforgetcache($key,$option);
+	}
+
+	protected function setforgetcache(string $key, string $option){
+		$key = md5($key.$option);
+		if($this->cacheMan()->has($key)){
+			$this->cacheMan()->forget($key);
+			return $this;
+		}
+		if($this->config('debug')===true){
+			throw new Exception("Not found key cache", 1);
+		}
+		return null;
+	}
+
+	protected function cacheMan(){
+		if(func_num_args() !== 0){
+			if($this->config('debug')===true){
+				throw new Exception("Arguments must be 0:", 1);
+			}
+			return null;
+		}
+		$lc = new Container;
+		$lc['config'] = [
+        'cache.default' => 'file',
+        'cache.stores.file' => [
+            'driver' => 'file',
+            'path' => $this->cachePath()
+	        ]
+	    ];
+	    $lc['files'] = new Filesystem;
+	    $cacheManager = new CacheManager($lc);
+	    return $cacheManager->store();
+	}
+
 	public function rootchange(string $dir){
 		return $this->setrootchange($dir);
 	}
 
 	protected function setrootchange(string $dir){
-		if(func_num_args() !== 1){
-			if($this->config('debug')===true){
-				throw new Exception("Arguments must be 1:", 1);
-			}
-			return;
-		}
 		$items = $this->resoleveItem();
 		$key = array_keys($items);
 		$results = [];
@@ -245,7 +325,7 @@ class Dpscan implements DpscanInterface
 				}
 			}
 		}
-		$results = (count(array_values($result)) !== 0)?$results:[];
+		$results = (count(array_values($results)) !== 0)?$results:[];
 		return $this->createItems($results);
 	}
 
@@ -281,7 +361,7 @@ class Dpscan implements DpscanInterface
 		return $this->getResultsByRegex($array,$this->onlydir()->items,1);
 	}
 
-	protected function getResultsByRegex(array $regex,array $lists,int $option){
+	protected function getResultsByRegex(array $contains,array $lists,int $option){
 		$range = range(0,1);
 		if(isset($range[$option]) === false){
 			return [];
@@ -294,7 +374,7 @@ class Dpscan implements DpscanInterface
 		for ($i=0; $i < count($contains); $i++) {
 			$item = $contains[$i];
 			for ($l=0; $l < count($lists); $l++) {
-				if(preg_match($item, $lists[$l]) === $option){
+				if(preg_match($item, $lists[$key[$l]]) === 0){
 					if($option === 0){
 						$results[$lists[$key[$l]]][$i] = $lists[$key[$l]];
 					}
@@ -314,7 +394,7 @@ class Dpscan implements DpscanInterface
 				}
 			}
 		}
-		$results = (count(array_values($result)) !== 0)?$results:[];
+		$results = (count(array_values($results)) !== 0)?$results:[];
 		return $this->createItems($results);
 	}
 
@@ -322,7 +402,7 @@ class Dpscan implements DpscanInterface
 		if(func_num_args() !== 0){
 			return;
 		}
-		if(str_contains($this->rootfolder,$this->config('root')) !== true){
+		if(str_contains($this->rootfolder,$this->setRootFolder()) !== true){
 			throw new Exception($this->rootfolder
 				." must be inside of config path", 1);
 		}
@@ -351,7 +431,11 @@ class Dpscan implements DpscanInterface
 	}
 
 	protected function setitems(){
-		return new Collection($this->items);
+		return $this->items;
+	}
+
+	protected function getItemKey(){
+		return array_keys($this->resoleveItem());
 	}
 
 	protected function getAllContent(array $lists,$now = 0,array $results = []){
@@ -385,19 +469,29 @@ class Dpscan implements DpscanInterface
 		return $new;
 	}
 
-	private function config(string $params = null){
+	protected function config(string $params = null){
 		if(func_num_args() !== 1){
-			if($this->config('debug')===true){
-				throw new Exception("Arguments must be 1:", 1);
-			}
-			return null;
+			throw new Exception("Arguments must be 1:", 1);
 		}
-        return ($params === isset(config('dpscan')[$params]))?
-        $this->localConfig()[$params]:
-        config('dpscan')[$params];
+		$config = $this->getConfig();
+        return (true === isset($config[$params]))?
+        $config[$params]:exit(1);
     }
 
-    private function localConfig(){
+    protected function getConfig(){
+    	$root = $this->localConfig()['root'].
+    		DIRECTORY_SEPARATOR.
+    		'config'.
+    		DIRECTORY_SEPARATOR.
+    		'dpscan.php';
+    	if(file_exists($root) === true){
+    		return include($root);
+    	}else{
+    		return $this->localConfig();
+    	}
+    }
+
+    protected function localConfig(){
     	if(func_num_args() !== 0){
 			return null;
 		}
@@ -408,10 +502,20 @@ class Dpscan implements DpscanInterface
     }
 
     protected function setRootFolder(){
-    	return (null === $this->config('root'))?__DIR__:$this->config('root');
+    	return (false === $this->config('root'))?
+    	realpath(getcwd()."/../"):$this->config('root');
     }
 
     protected function protectedFile(){
-    	return (null === $this->config('protected'))?[]:implode(' ',$this->config('protected'));
+    	return (null === $this->config('protected'))?
+    	[]:implode(' ',$this->config('protected'));
     }
+
+    protected function cachePath(){
+		$path = $this->setRootFolder().$this->config('cache');
+		if(is_dir($path) === true){
+			return $path;
+		}
+		throw new Exception("Not Found Cache Config: ".$path, 1);
+	}
 }
