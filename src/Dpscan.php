@@ -9,6 +9,7 @@ use Exception;
 
 class Dpscan implements DpscanInterface
 {
+
 	/**
      * The rootfolder.
      *
@@ -73,17 +74,11 @@ class Dpscan implements DpscanInterface
 		}
 		$this->setCache($minutes,$key,$option);
 		$this->setAutoCache($key,$option);
-		return $this->getcache(60,$key,$option);
+		return $this->getcache(0,$key,$option);
 	}
 
 	protected function setcache(int $minutes,string $key,string $option){
-		$listmethod = array_flip(get_class_methods(DpscanInterface::class));
-		if(isset($listmethod[$option]) === null){
-			if($this->config('debug')===true){
-				throw new Exception("Unknow Action: ".$option, 1);
-			}
-			return;
-		}
+		$this->listmethod($option);
 		$keylock = md5($key.$option);
 		$this->cacheMan()->remember($keylock,$minutes, function ()
 			use($option){
@@ -97,6 +92,20 @@ class Dpscan implements DpscanInterface
 		});
 	}
 
+	protected function listmethod(string $func){
+		$listmethod = array_flip(get_class_methods(DpscanInterface::class));
+		unset($listmethod['cache']);
+		unset($listmethod['forgetcache']);
+		unset($listmethod['items']);
+		$listmethod = isset($listmethod[$func]);
+		if($listmethod === false){
+			if($this->config('debug')===true){
+				throw new Exception("Unknow Action: ".$option, 1);
+			}
+		}
+		return $listmethod;
+	}
+
 	protected function setAutoCache(string $key,string $option){
 		if($this->config('cacheautoupdate') === true){
 			$data = [];
@@ -108,7 +117,7 @@ class Dpscan implements DpscanInterface
 				);
 			}
 			$key = md5($key.$option);
-			$this->cacheMan()->remember($lockey,60,function() use($key,$data){
+			$this->cacheMan()->remember($lockey,$this->config('cacheduration'),function() use($key,$data){
 				$data[$key]	= filemtime($this->rootfolder);
 				return base64_encode(json_encode($data));
 			});
@@ -513,6 +522,9 @@ class Dpscan implements DpscanInterface
 
     protected function cachePath(){
 		$path = $this->setRootFolder().$this->config('cache');
+		if($path === $this->setRootFolder()){
+			throw new Exception("Cache cant set on root dir:".$path, 1);
+		}
 		if(is_dir($path) === true){
 			return $path;
 		}

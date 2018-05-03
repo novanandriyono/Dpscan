@@ -44,6 +44,15 @@ return [
 
 	'cacheautoupdate' => false,
 
+	/*
+	|
+    | cacheduration
+    | set default duration for cache
+    | by default 60|int as minute
+    |
+    */
+
+	'cacheduration' => 60,
 
 	/*
 	|
