@@ -488,8 +488,7 @@ class Dpscan implements DpscanInterface
     }
 
     protected function getConfig(){
-    	$root = $this->localConfig()['root'].
-    		DIRECTORY_SEPARATOR.
+    	$root = realpath(getcwd()."/../").DIRECTORY_SEPARATOR.
     		'config'.
     		DIRECTORY_SEPARATOR.
     		'dpscan.php';
