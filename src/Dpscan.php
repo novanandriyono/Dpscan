@@ -521,7 +521,7 @@ class Dpscan implements DpscanInterface
     }
 
     protected function cachePath(){
-		$path = $this->setRootFolder().$this->config('cache');
+		$path = realpath(getcwd()."/..").$this->config('cache');
 		if($path === $this->setRootFolder()){
 			throw new Exception("Cache cant set on root dir:".$path, 1);
 		}
