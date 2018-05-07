@@ -55,7 +55,7 @@ class Dpscan implements DpscanInterface
 			}
 			return;
 		}
-		$this->rootfolder = (is_dir($dir) === true)?$dir:exit();
+		$this->rootfolder = $dir;
 		return $this;
 	}
 
