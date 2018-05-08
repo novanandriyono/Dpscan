@@ -13,7 +13,7 @@ class Dpscan implements DpscanInterface
 	/**
      * The rootfolder.
      *
-     * @var void
+     * @var string
      */
 
 	protected $rootfolder;
@@ -55,7 +55,7 @@ class Dpscan implements DpscanInterface
 			}
 			return;
 		}
-		$this->rootfolder = (is_dir($dir) === true)?$dir:exit();
+		$this->rootfolder = $dir;
 		return $this;
 	}
 
@@ -100,7 +100,7 @@ class Dpscan implements DpscanInterface
 		$listmethod = isset($listmethod[$func]);
 		if($listmethod === false){
 			if($this->config('debug')===true){
-				throw new Exception("Unknow Action: ".$option, 1);
+				throw new Exception("Unknow Action: ".$func, 1);
 			}
 		}
 		return $listmethod;
@@ -488,7 +488,8 @@ class Dpscan implements DpscanInterface
     }
 
     protected function getConfig(){
-    	$root = realpath(getcwd()."/../").DIRECTORY_SEPARATOR.
+    	$path = realpath(getcwd()."/../");
+    	$root = $path.DIRECTORY_SEPARATOR.
     		'config'.
     		DIRECTORY_SEPARATOR.
     		'dpscan.php';
@@ -520,7 +521,7 @@ class Dpscan implements DpscanInterface
     }
 
     protected function cachePath(){
-		$path = $this->setRootFolder().$this->config('cache');
+		$path = realpath(getcwd()."/..").$this->config('cache');
 		if($path === $this->setRootFolder()){
 			throw new Exception("Cache cant set on root dir:".$path, 1);
 		}
